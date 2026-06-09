@@ -1,6 +1,6 @@
 """
 GridFlow — WebSocket Proxy для Binance Futures
-Запускается на Fly.io (Amsterdam), пробрасывает fstream.binance.com
+Запускается на Render/Koyeb, пробрасывает fstream.binance.com
 """
 import asyncio
 import websockets
@@ -14,8 +14,17 @@ log = logging.getLogger(__name__)
 BINANCE_BASE = "wss://fstream.binance.com"
 
 
-async def proxy_handler(client_ws):
-    path = client_ws.request.path  # /stream?streams=dogeusdt@aggTrade
+async def proxy_handler(client_ws, path=None):
+    # Совместимость со старыми и новыми версиями websockets
+    if path is None:
+        try:
+            path = client_ws.request.path
+        except AttributeError:
+            try:
+                path = client_ws.path
+            except AttributeError:
+                path = "/stream?streams=dogeusdt@aggTrade"
+
     binance_url = BINANCE_BASE + path
     log.info(f"Connect → {binance_url}")
 
@@ -43,7 +52,6 @@ async def health(request):
 
 
 async def main():
-    # HTTP health check на порту 8081
     app = web.Application()
     app.router.add_get("/health", health)
     runner = web.AppRunner(app)
@@ -51,8 +59,7 @@ async def main():
     site = web.TCPSite(runner, "0.0.0.0", 8081)
     await site.start()
 
-    # WebSocket прокси на порту 8080
-    log.info("GridFlow WS Proxy started on :8080, health on :8081/health")
+    log.info("GridFlow WS Proxy started on :8080")
     async with serve(proxy_handler, "0.0.0.0", 8080):
         await asyncio.Future()
 
